@@ -275,7 +275,7 @@ static void handleAppCmd(struct android_app *app, int32_t appCmd)
 
 static int32_t handleInputEvent(struct android_app *app, AInputEvent *inputEvent)
 {
-    return ImGui_ImplAndroid_handleInputEvent(inputEvent);
+    return ImGui_ImplAndroid_HandleInputEvent(inputEvent);
 }
 
 void android_main(struct android_app *app)

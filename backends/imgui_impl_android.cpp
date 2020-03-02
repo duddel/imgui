@@ -34,7 +34,7 @@ static ANativeWindow*                           g_Window;
 static char                                     g_logTag[] = "ImguiExample";
 static std::map<int32_t, std::queue<int32_t>>   g_keyEventQueues;
 
-int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
+int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
 {
     ImGuiIO &io = ImGui::GetIO();
     int32_t evType = AInputEvent_getType(inputEvent);
@@ -94,7 +94,7 @@ int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
     return 0;
 }
 
-bool ImGui_ImplAndroid_Init(ANativeWindow *window)
+bool ImGui_ImplAndroid_Init(ANativeWindow* window)
 {
     g_Window = window;
     g_Time = 0.0;
