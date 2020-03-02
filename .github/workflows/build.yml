@@ -458,6 +458,18 @@ jobs:
         popd
         make -C examples/example_emscripten_wgpu
 
+  Android:
+    runs-on: ubuntu-18.04
+    steps:
+    - uses: actions/checkout@v1
+      with:
+        fetch-depth: 1
+
+    - name: Build example_android_opengl3
+      run: |
+        cd examples/example_android_opengl3
+        ./build_android.sh
+
   Discord-CI:
     runs-on: ubuntu-18.04
     if: always()
