@@ -3,14 +3,15 @@
     package="imgui.example.android">
 
     <application
+        android:label="ImguiExample"
         android:allowBackup="false"
         android:fullBackupContent="false"
-        android:hasCode="false">
+        android:hasCode="true">
 
-        <activity android:name="android.app.NativeActivity"
-            android:configChanges="orientation"
-            android:windowSoftInputMode="stateVisible">
-
+        <activity
+            android:name="imgui.example.android.MainActivity"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|keyboardHidden|screenSize">
             <meta-data android:name="android.app.lib_name"
                 android:value="ImguiExample" />
 
