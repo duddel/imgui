@@ -38,7 +38,26 @@ int32_t ImGui_ImplAndroid_handleInputEvent(struct android_app *app, AInputEvent 
     switch (evType)
     {
     case AINPUT_EVENT_TYPE_KEY:
+    {
+        int32_t evKeyCode = AKeyEvent_getKeyCode(inputEvent);
+        int32_t evAction = AKeyEvent_getAction(inputEvent);
+        switch (evAction) {
+            // todo: AKEY_EVENT_ACTION_DOWN and AKEY_EVENT_ACTION_UP occur at once
+            // as soon as a touch pointer goes up from a key. Therefore, no ImGui frame
+            // happens between DOWN and UP, hence the key input is not registered.
+            // We could buffer the UP events and delay them one frame, or consider
+            // ImGui IO queue, if suitable: https://github.com/ocornut/imgui/issues/2787
+            // todo: AKEY_EVENT_ACTION_MULTIPLE has to be taken into account to
+            // capture (special) characters, that do not map directly to keys.
+            case AKEY_EVENT_ACTION_DOWN:
+            case AKEY_EVENT_ACTION_UP:
+                io.KeysDown[evKeyCode] = (evAction == AKEY_EVENT_ACTION_DOWN);
+                break;
+            default:
+                break;
+        }
         break;
+    }
     case AINPUT_EVENT_TYPE_MOTION:
     {
         int32_t evAction = AMotionEvent_getAction(inputEvent);
@@ -80,6 +99,32 @@ bool ImGui_ImplAndroid_Init(struct android_app *app, int32_t (*userOnInputEvent)
     // todo: any reasonable io.BackendFlags?
     io.BackendPlatformName = "imgui_impl_android";
 
+    // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
+    // todo: Check if this procedure can be applied to android key codes
+    // and complete the the required key mappings.
+    io.KeyMap[ImGuiKey_Tab] = AKEYCODE_TAB;
+    //io.KeyMap[ImGuiKey_LeftArrow] = ; // ??
+    //io.KeyMap[ImGuiKey_RightArrow] = ; // ??
+    //io.KeyMap[ImGuiKey_UpArrow] = ; // ??
+    //io.KeyMap[ImGuiKey_DownArrow] = ; // ??
+    io.KeyMap[ImGuiKey_PageUp] = AKEYCODE_PAGE_UP;
+    io.KeyMap[ImGuiKey_PageDown] = AKEYCODE_PAGE_DOWN;
+    io.KeyMap[ImGuiKey_Home] = AKEYCODE_HOME;
+    //io.KeyMap[ImGuiKey_End] = AKEYCODE_MOVE_END; // ??
+    io.KeyMap[ImGuiKey_Insert] = AKEYCODE_INSERT;
+    io.KeyMap[ImGuiKey_Delete] = AKEYCODE_DEL;
+    //io.KeyMap[ImGuiKey_Backspace] = AKEYCODE_DEL; // ??
+    io.KeyMap[ImGuiKey_Space] = AKEYCODE_SPACE;
+    io.KeyMap[ImGuiKey_Enter] = AKEYCODE_ENTER;
+    io.KeyMap[ImGuiKey_Escape] = AKEYCODE_ESCAPE;
+    io.KeyMap[ImGuiKey_KeyPadEnter] = AKEYCODE_NUMPAD_ENTER;
+    io.KeyMap[ImGuiKey_A] = AKEYCODE_A;
+    io.KeyMap[ImGuiKey_C] = AKEYCODE_C;
+    io.KeyMap[ImGuiKey_V] = AKEYCODE_V;
+    io.KeyMap[ImGuiKey_X] = AKEYCODE_X;
+    io.KeyMap[ImGuiKey_Y] = AKEYCODE_Y;
+    io.KeyMap[ImGuiKey_Z] = AKEYCODE_Z;
+
     return true;
 }
 
@@ -95,8 +140,7 @@ void ImGui_ImplAndroid_NewFrame()
 
     if (io.WantTextInput)
     {
-        // todo: Show soft keyboard
-        // Something like: ANativeActivity_showSoftInput(g_App->activity, ANATIVEACTIVITY_SHOW_SOFT_INPUT_FORCED);
+        // todo: call showSoftInput() implemented in MainActivity.kt from here via JNI
     }
 
     // Setup display size (every frame to accommodate for window resizing)
