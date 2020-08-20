@@ -16,6 +16,8 @@
 #include "imgui.h"
 #include "imgui_impl_android.h"
 #include <ctime>
+#include <map>
+#include <queue>
 
 // Android
 #include <android_native_app_glue.h>
@@ -23,9 +25,10 @@
 #include <android/keycodes.h>
 #include <android/log.h>
 
-static double               g_Time = 0.0;
-static struct android_app*  g_App;
-static char                 g_logTag[] = "ImguiExample";
+static double                                   g_Time = 0.0;
+static struct android_app*                      g_App;
+static char                                     g_logTag[] = "ImguiExample";
+static std::map<int32_t, std::queue<int32_t>>   g_keyEventQueues;
 static int32_t (*g_UserOnInputEvent)(struct android_app *app, AInputEvent *event) = NULL;
 
 int32_t ImGui_ImplAndroid_handleInputEvent(struct android_app *app, AInputEvent *inputEvent)
@@ -43,15 +46,19 @@ int32_t ImGui_ImplAndroid_handleInputEvent(struct android_app *app, AInputEvent 
         int32_t evAction = AKeyEvent_getAction(inputEvent);
         switch (evAction) {
             // todo: AKEY_EVENT_ACTION_DOWN and AKEY_EVENT_ACTION_UP occur at once
-            // as soon as a touch pointer goes up from a key. Therefore, no ImGui frame
-            // happens between DOWN and UP, hence the key input is not registered.
-            // We could buffer the UP events and delay them one frame, or consider
-            // ImGui IO queue, if suitable: https://github.com/ocornut/imgui/issues/2787
+            // as soon as a touch pointer goes up from a key. We use a simple key event queue
+            // and process one event per key per ImGui frame in ImGui_ImplAndroid_NewFrame().
+            // ...or consider ImGui IO queue, if suitable: https://github.com/ocornut/imgui/issues/2787
             // todo: AKEY_EVENT_ACTION_MULTIPLE has to be taken into account to
             // capture (special) characters, that do not map directly to keys.
             case AKEY_EVENT_ACTION_DOWN:
+                // todo: the corresponding ASCII character of the key event has to be sent to
+                // ImGui via io.AddInputCharacter(..). It seems to be impossible to get the
+                // character here in native code. We must call KeyEvent.getUnicodeChar()
+                // from here via JNI to get the character.
+                // intended fallthrough...
             case AKEY_EVENT_ACTION_UP:
-                io.KeysDown[evKeyCode] = (evAction == AKEY_EVENT_ACTION_DOWN);
+                g_keyEventQueues[evKeyCode].push(evAction);
                 break;
             default:
                 break;
@@ -110,10 +117,10 @@ bool ImGui_ImplAndroid_Init(struct android_app *app, int32_t (*userOnInputEvent)
     io.KeyMap[ImGuiKey_PageUp] = AKEYCODE_PAGE_UP;
     io.KeyMap[ImGuiKey_PageDown] = AKEYCODE_PAGE_DOWN;
     io.KeyMap[ImGuiKey_Home] = AKEYCODE_HOME;
-    //io.KeyMap[ImGuiKey_End] = AKEYCODE_MOVE_END; // ??
+    io.KeyMap[ImGuiKey_End] = AKEYCODE_MOVE_END;
     io.KeyMap[ImGuiKey_Insert] = AKEYCODE_INSERT;
-    io.KeyMap[ImGuiKey_Delete] = AKEYCODE_DEL;
-    //io.KeyMap[ImGuiKey_Backspace] = AKEYCODE_DEL; // ??
+    io.KeyMap[ImGuiKey_Delete] = AKEYCODE_FORWARD_DEL;
+    io.KeyMap[ImGuiKey_Backspace] = AKEYCODE_DEL;
     io.KeyMap[ImGuiKey_Space] = AKEYCODE_SPACE;
     io.KeyMap[ImGuiKey_Enter] = AKEYCODE_ENTER;
     io.KeyMap[ImGuiKey_Escape] = AKEYCODE_ESCAPE;
@@ -137,6 +144,15 @@ void ImGui_ImplAndroid_NewFrame()
 {
     ImGuiIO &io = ImGui::GetIO();
     IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer back-end. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
+
+    // Process queued key events
+    for (auto &keyQueue : g_keyEventQueues)
+    {
+        if (keyQueue.second.size() == 0)
+            continue;
+        io.KeysDown[keyQueue.first] = (keyQueue.second.front() == AKEY_EVENT_ACTION_DOWN);
+        keyQueue.second.pop();
+    }
 
     if (io.WantTextInput)
     {

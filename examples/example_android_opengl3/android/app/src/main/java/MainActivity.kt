@@ -11,6 +11,7 @@ class MainActivity : NativeActivity() {
     }
 
     private fun showSoftInput() {
+        // todo: if targetSdkVersion is 28 (android P) or later, this flag is ignored and the soft input does not show up!
         this.window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE)
     }
 }
