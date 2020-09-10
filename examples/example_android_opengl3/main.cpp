@@ -70,7 +70,7 @@ void init(struct android_app *app)
     ImGuiIO &io = ImGui::GetIO();
     io.IniFilename = NULL;
     ImGui::StyleColorsDark();
-    ImGui_ImplAndroid_Init(app);
+    ImGui_ImplAndroid_Init(app->activity, app->window);
     ImGui_ImplOpenGL3_Init("#version 300 es");
 
     // Arbitrary scale-up
@@ -192,9 +192,15 @@ static void handleAppCmd(struct android_app *app, int32_t appCmd)
     }
 }
 
+static int32_t handleInputEvent(struct android_app *app, AInputEvent *inputEvent)
+{
+    return ImGui_ImplAndroid_handleInputEvent(inputEvent);
+}
+
 void android_main(struct android_app *app)
 {
     app->onAppCmd = handleAppCmd;
+    app->onInputEvent = handleInputEvent;
 
     while (true)
     {

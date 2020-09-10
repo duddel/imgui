@@ -13,8 +13,8 @@
 
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
-//  2020-03-02: basic draft, touch input
 //  2020-08-31: On-screen and physical keyboard input (ASCII characters only)
+//  2020-03-02: basic draft, touch input
 
 #include "imgui.h"
 #include "imgui_impl_android.h"
@@ -23,22 +23,23 @@
 #include <queue>
 
 // Android
-#include <android_native_app_glue.h>
+#include <android/native_activity.h>
+#include <android/native_window.h>
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/log.h>
 
 static double                                   g_Time = 0.0;
-static struct android_app*                      g_App;
+static ANativeActivity*                         g_Activity;
+static ANativeWindow*                           g_Window;
 static char                                     g_logTag[] = "ImguiExample";
 static std::map<int32_t, std::queue<int32_t>>   g_keyEventQueues;
-static int32_t (*g_UserOnInputEvent)(struct android_app *app, AInputEvent *event) = NULL;
 
 // Unfortunately, there is no way to show the on-screen input from native code.
 // Therefore, we call showSoftInput() of the main activity implemented in MainActivity.kt via JNI.
 int ImGui_ImplAndroid_showSoftInput()
 {
-    JavaVM *jVM = g_App->activity->vm;
+    JavaVM *jVM = g_Activity->vm;
     JNIEnv *jEnv = NULL;
 
     jint jniRet = jVM->GetEnv((void **)&jEnv, JNI_VERSION_1_6);
@@ -49,7 +50,7 @@ int ImGui_ImplAndroid_showSoftInput()
     if (jniRet != JNI_OK)
         return -2;
 
-    jclass natActClazz = jEnv->GetObjectClass(g_App->activity->clazz);
+    jclass natActClazz = jEnv->GetObjectClass(g_Activity->clazz);
     if (natActClazz == NULL)
         return -3;
 
@@ -57,7 +58,7 @@ int ImGui_ImplAndroid_showSoftInput()
     if (methodID == NULL)
         return -4;
 
-    jEnv->CallVoidMethod(g_App->activity->clazz, methodID);
+    jEnv->CallVoidMethod(g_Activity->clazz, methodID);
 
     jniRet = jVM->DetachCurrentThread();
     if (jniRet != JNI_OK)
@@ -71,7 +72,7 @@ int ImGui_ImplAndroid_showSoftInput()
 // todo: This whole procedure is done on every key press and deserves optimization
 int ImGui_ImplAndroid_getCharacter(int event_type, int key_code, int meta_state)
 {
-    JavaVM *jVM = g_App->activity->vm;
+    JavaVM *jVM = g_Activity->vm;
     JNIEnv *jEnv = NULL;
 
     jint jniRet = jVM->GetEnv((void **)&jEnv, JNI_VERSION_1_6);
@@ -104,11 +105,8 @@ int ImGui_ImplAndroid_getCharacter(int event_type, int key_code, int meta_state)
     return keyEventChar;
 }
 
-int32_t ImGui_ImplAndroid_handleInputEvent(struct android_app *app, AInputEvent *inputEvent)
+int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
 {
-    if (g_UserOnInputEvent != NULL)
-        g_UserOnInputEvent(app, inputEvent);
-
     ImGuiIO &io = ImGui::GetIO();
     int32_t evType = AInputEvent_getType(inputEvent);
     switch (evType)
@@ -180,12 +178,11 @@ int32_t ImGui_ImplAndroid_handleInputEvent(struct android_app *app, AInputEvent 
     return 0;
 }
 
-bool ImGui_ImplAndroid_Init(struct android_app *app, int32_t (*userOnInputEvent)(struct android_app *app, AInputEvent *event))
+bool ImGui_ImplAndroid_Init(ANativeActivity *activity, ANativeWindow *window)
 {
-    g_App = app;
-    g_UserOnInputEvent = userOnInputEvent;
+    g_Activity = activity;
+    g_Window = window;
     g_Time = 0.0;
-    g_App->onInputEvent = ImGui_ImplAndroid_handleInputEvent;
 
     // Setup back-end capabilities flags
     ImGuiIO &io = ImGui::GetIO();
@@ -219,10 +216,7 @@ bool ImGui_ImplAndroid_Init(struct android_app *app, int32_t (*userOnInputEvent)
     return true;
 }
 
-void ImGui_ImplAndroid_Shutdown()
-{
-    g_UserOnInputEvent = NULL;
-}
+void ImGui_ImplAndroid_Shutdown() { }
 
 void ImGui_ImplAndroid_NewFrame()
 {
@@ -244,9 +238,8 @@ void ImGui_ImplAndroid_NewFrame()
     WantTextInputLast = io.WantTextInput;
 
     // Setup display size (every frame to accommodate for window resizing)
-    // todo: utilize the actual framebuffer size
-    int32_t w = ANativeWindow_getWidth(g_App->window);
-    int32_t h = ANativeWindow_getHeight(g_App->window);
+    int32_t w = ANativeWindow_getWidth(g_Window);
+    int32_t h = ANativeWindow_getHeight(g_Window);
     int display_w = w;
     int display_h = h;
 
