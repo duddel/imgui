@@ -4,7 +4,7 @@
 // Implemented features:
 //  [x] Basic mouse input via touch
 //  [x] Open soft keyboard if io.WantTextInput and perform proper keyboard input
-//  [ ] Handle Unicode characters
+//  [x] Handle Unicode characters
 //  [ ] Handle physical mouse input
 
 // You can copy and use unmodified imgui_impl_* files in your project. See main.cpp for an example of using this.
@@ -13,6 +13,7 @@
 
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
+//  2020-09-13: Support for Unicode characters
 //  2020-08-31: On-screen and physical keyboard input (ASCII characters only)
 //  2020-03-02: basic draft, touch input
 
@@ -68,9 +69,9 @@ int ImGui_ImplAndroid_showSoftInput()
 }
 
 // Unfortunately, the native KeyEvent implementation has no getUnicodeChar() function.
-// Therefore, we construct a non-native KeyEvent instance and call getUnicodeChar() here via JNI.
-// todo: This whole procedure is done on every key press and deserves optimization
-int ImGui_ImplAndroid_getCharacter(int event_type, int key_code, int meta_state)
+// Therefore, we implement the processing of KeyEvents in MainActivity.kt and poll
+// the resulting Unicode characters here via JNI and send them to Dear ImGui.
+int ImGui_ImplAndroid_pollUnicodeChars()
 {
     JavaVM *jVM = g_Activity->vm;
     JNIEnv *jEnv = NULL;
@@ -83,26 +84,27 @@ int ImGui_ImplAndroid_getCharacter(int event_type, int key_code, int meta_state)
     if (jniRet != JNI_OK)
         return -2;
 
-    jclass keyEventCls = jEnv->FindClass("android/view/KeyEvent");
-    if (keyEventCls == NULL)
+    jclass natActClazz = jEnv->GetObjectClass(g_Activity->clazz);
+    if (natActClazz == NULL)
         return -3;
 
-    jmethodID keyEventCtor = jEnv->GetMethodID(keyEventCls, "<init>", "(II)V");
-    if (keyEventCtor == NULL)
+    jmethodID methodID = jEnv->GetMethodID(natActClazz, "pollUnicodeChar", "()I");
+    if (methodID == NULL)
         return -4;
 
-    jmethodID keyEventGetUnicodeChar = jEnv->GetMethodID(keyEventCls, "getUnicodeChar", "(I)I");
-    if (keyEventGetUnicodeChar == NULL)
+    // Send the actual characters to Dear ImGui
+    ImGuiIO &io = ImGui::GetIO();
+    jint unicChar;
+    while ((unicChar = jEnv->CallIntMethod(g_Activity->clazz, methodID)) != 0)
+    {
+        io.AddInputCharacter(unicChar);
+    }
+
+    jniRet = jVM->DetachCurrentThread();
+    if (jniRet != JNI_OK)
         return -5;
 
-    jobject jKeyEvent = jEnv->NewObject(keyEventCls, keyEventCtor, event_type, key_code);
-    jint keyEventChar = jEnv->CallIntMethod(jKeyEvent, keyEventGetUnicodeChar, meta_state);
-
-    jVM->DetachCurrentThread();
-    if (jniRet != JNI_OK)
-        return -6;
-
-    return keyEventChar;
+    return 0;
 }
 
 int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
@@ -128,21 +130,8 @@ int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
         // and process one event per key per ImGui frame in ImGui_ImplAndroid_NewFrame().
         // ...or consider ImGui IO queue, if suitable: https://github.com/ocornut/imgui/issues/2787
         case AKEY_EVENT_ACTION_DOWN:
-        {
-            // todo: The procedure in ImGui_ImplAndroid_getCharacter() returns ASCII characters
-            // only. To get unicode characters, we may have to consider AKEY_EVENT_ACTION_MULTIPLE
-            // and feed the result into ImGui via io.AddInputCharactersUTF8()
-            int character = ImGui_ImplAndroid_getCharacter(evAction, evKeyCode, evMetaState);
-            // make sure the character really is ASCII only
-            if (character > 127)
-                character = 63; // questionmark
-            io.AddInputCharacter(character);
-        }
-        // intended fallthrough...
         case AKEY_EVENT_ACTION_UP:
             g_keyEventQueues[evKeyCode].push(evAction);
-            break;
-        case AKEY_EVENT_ACTION_MULTIPLE:
             break;
         default:
             break;
@@ -216,12 +205,16 @@ bool ImGui_ImplAndroid_Init(ANativeActivity *activity, ANativeWindow *window)
     return true;
 }
 
-void ImGui_ImplAndroid_Shutdown() { }
+void ImGui_ImplAndroid_Shutdown() {}
 
 void ImGui_ImplAndroid_NewFrame()
 {
     ImGuiIO &io = ImGui::GetIO();
     IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer back-end. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
+
+    // Poll Unicode characters via JNI
+    // todo: do not call this every frame because of JNI overhead
+    ImGui_ImplAndroid_pollUnicodeChars();
 
     // Process queued key events
     for (auto &keyQueue : g_keyEventQueues)
