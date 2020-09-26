@@ -16,6 +16,77 @@ static struct android_app*  g_App = NULL;
 static bool                 g_initialized = false;
 static char                 g_logTag[] = "ImguiExample";
 
+// Unfortunately, there is no way to show the on-screen input from native code.
+// Therefore, we call showSoftInput() of the main activity implemented in MainActivity.kt via JNI.
+static int showSoftInput()
+{
+    JavaVM *jVM = g_App->activity->vm;
+    JNIEnv *jEnv = NULL;
+
+    jint jniRet = jVM->GetEnv((void **)&jEnv, JNI_VERSION_1_6);
+    if (jniRet == JNI_ERR)
+        return -1;
+
+    jniRet = jVM->AttachCurrentThread(&jEnv, NULL);
+    if (jniRet != JNI_OK)
+        return -2;
+
+    jclass natActClazz = jEnv->GetObjectClass(g_App->activity->clazz);
+    if (natActClazz == NULL)
+        return -3;
+
+    jmethodID methodID = jEnv->GetMethodID(natActClazz, "showSoftInput", "()V");
+    if (methodID == NULL)
+        return -4;
+
+    jEnv->CallVoidMethod(g_App->activity->clazz, methodID);
+
+    jniRet = jVM->DetachCurrentThread();
+    if (jniRet != JNI_OK)
+        return -5;
+
+    return 0;
+}
+
+// Unfortunately, the native KeyEvent implementation has no getUnicodeChar() function.
+// Therefore, we implement the processing of KeyEvents in MainActivity.kt and poll
+// the resulting Unicode characters here via JNI and send them to Dear ImGui.
+static int pollUnicodeChars()
+{
+    JavaVM *jVM = g_App->activity->vm;
+    JNIEnv *jEnv = NULL;
+
+    jint jniRet = jVM->GetEnv((void **)&jEnv, JNI_VERSION_1_6);
+    if (jniRet == JNI_ERR)
+        return -1;
+
+    jniRet = jVM->AttachCurrentThread(&jEnv, NULL);
+    if (jniRet != JNI_OK)
+        return -2;
+
+    jclass natActClazz = jEnv->GetObjectClass(g_App->activity->clazz);
+    if (natActClazz == NULL)
+        return -3;
+
+    jmethodID methodID = jEnv->GetMethodID(natActClazz, "pollUnicodeChar", "()I");
+    if (methodID == NULL)
+        return -4;
+
+    // Send the actual characters to Dear ImGui
+    ImGuiIO &io = ImGui::GetIO();
+    jint unicChar;
+    while ((unicChar = jEnv->CallIntMethod(g_App->activity->clazz, methodID)) != 0)
+    {
+        io.AddInputCharacter(unicChar);
+    }
+
+    jniRet = jVM->DetachCurrentThread();
+    if (jniRet != JNI_OK)
+        return -5;
+
+    return 0;
+}
+
 void init(struct android_app *app)
 {
     if (g_initialized)
@@ -70,7 +141,7 @@ void init(struct android_app *app)
     ImGuiIO &io = ImGui::GetIO();
     io.IniFilename = NULL;
     ImGui::StyleColorsDark();
-    ImGui_ImplAndroid_Init(app->activity, app->window);
+    ImGui_ImplAndroid_Init(app->window);
     ImGui_ImplOpenGL3_Init("#version 300 es");
 
     // Arbitrary scale-up
@@ -90,6 +161,16 @@ void tick()
     if (g_elgDisplay != EGL_NO_DISPLAY)
     {
         ImGuiIO& io = ImGui::GetIO();
+
+        // Poll Unicode characters via JNI
+        // todo: do not call this every frame because of JNI overhead
+        pollUnicodeChars();
+
+        // Open on-screen (soft) input if demanded by Dear ImGui
+        static bool WantTextInputLast = false;
+        if (io.WantTextInput && !WantTextInputLast)
+            showSoftInput();
+        WantTextInputLast = io.WantTextInput;
 
         // Start the Dear ImGui frame
         ImGui_ImplOpenGL3_NewFrame();

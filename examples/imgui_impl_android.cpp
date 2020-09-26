@@ -24,88 +24,15 @@
 #include <queue>
 
 // Android
-#include <android/native_activity.h>
 #include <android/native_window.h>
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/log.h>
 
 static double                                   g_Time = 0.0;
-static ANativeActivity*                         g_Activity;
 static ANativeWindow*                           g_Window;
 static char                                     g_logTag[] = "ImguiExample";
 static std::map<int32_t, std::queue<int32_t>>   g_keyEventQueues;
-
-// Unfortunately, there is no way to show the on-screen input from native code.
-// Therefore, we call showSoftInput() of the main activity implemented in MainActivity.kt via JNI.
-int ImGui_ImplAndroid_showSoftInput()
-{
-    JavaVM *jVM = g_Activity->vm;
-    JNIEnv *jEnv = NULL;
-
-    jint jniRet = jVM->GetEnv((void **)&jEnv, JNI_VERSION_1_6);
-    if (jniRet == JNI_ERR)
-        return -1;
-
-    jniRet = jVM->AttachCurrentThread(&jEnv, NULL);
-    if (jniRet != JNI_OK)
-        return -2;
-
-    jclass natActClazz = jEnv->GetObjectClass(g_Activity->clazz);
-    if (natActClazz == NULL)
-        return -3;
-
-    jmethodID methodID = jEnv->GetMethodID(natActClazz, "showSoftInput", "()V");
-    if (methodID == NULL)
-        return -4;
-
-    jEnv->CallVoidMethod(g_Activity->clazz, methodID);
-
-    jniRet = jVM->DetachCurrentThread();
-    if (jniRet != JNI_OK)
-        return -5;
-
-    return 0;
-}
-
-// Unfortunately, the native KeyEvent implementation has no getUnicodeChar() function.
-// Therefore, we implement the processing of KeyEvents in MainActivity.kt and poll
-// the resulting Unicode characters here via JNI and send them to Dear ImGui.
-int ImGui_ImplAndroid_pollUnicodeChars()
-{
-    JavaVM *jVM = g_Activity->vm;
-    JNIEnv *jEnv = NULL;
-
-    jint jniRet = jVM->GetEnv((void **)&jEnv, JNI_VERSION_1_6);
-    if (jniRet == JNI_ERR)
-        return -1;
-
-    jniRet = jVM->AttachCurrentThread(&jEnv, NULL);
-    if (jniRet != JNI_OK)
-        return -2;
-
-    jclass natActClazz = jEnv->GetObjectClass(g_Activity->clazz);
-    if (natActClazz == NULL)
-        return -3;
-
-    jmethodID methodID = jEnv->GetMethodID(natActClazz, "pollUnicodeChar", "()I");
-    if (methodID == NULL)
-        return -4;
-
-    // Send the actual characters to Dear ImGui
-    ImGuiIO &io = ImGui::GetIO();
-    jint unicChar;
-    while ((unicChar = jEnv->CallIntMethod(g_Activity->clazz, methodID)) != 0)
-    {
-        io.AddInputCharacter(unicChar);
-    }
-
-    jniRet = jVM->DetachCurrentThread();
-    if (jniRet != JNI_OK)
-        return -5;
-
-    return 0;
-}
 
 int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
 {
@@ -167,9 +94,8 @@ int32_t ImGui_ImplAndroid_handleInputEvent(AInputEvent *inputEvent)
     return 0;
 }
 
-bool ImGui_ImplAndroid_Init(ANativeActivity *activity, ANativeWindow *window)
+bool ImGui_ImplAndroid_Init(ANativeWindow *window)
 {
-    g_Activity = activity;
     g_Window = window;
     g_Time = 0.0;
 
@@ -212,10 +138,6 @@ void ImGui_ImplAndroid_NewFrame()
     ImGuiIO &io = ImGui::GetIO();
     IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer back-end. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
 
-    // Poll Unicode characters via JNI
-    // todo: do not call this every frame because of JNI overhead
-    ImGui_ImplAndroid_pollUnicodeChars();
-
     // Process queued key events
     for (auto &keyQueue : g_keyEventQueues)
     {
@@ -224,11 +146,6 @@ void ImGui_ImplAndroid_NewFrame()
         io.KeysDown[keyQueue.first] = (keyQueue.second.front() == AKEY_EVENT_ACTION_DOWN);
         keyQueue.second.pop();
     }
-
-    static bool WantTextInputLast = false;
-    if (io.WantTextInput && !WantTextInputLast)
-        ImGui_ImplAndroid_showSoftInput();
-    WantTextInputLast = io.WantTextInput;
 
     // Setup display size (every frame to accommodate for window resizing)
     int32_t w = ANativeWindow_getWidth(g_Window);
