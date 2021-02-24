@@ -461,14 +461,12 @@ jobs:
   Android:
     runs-on: ubuntu-18.04
     steps:
-    - uses: actions/checkout@v1
-      with:
-        fetch-depth: 1
+    - uses: actions/checkout@v2
 
     - name: Build example_android_opengl3
       run: |
         cd examples/example_android_opengl3
-        ./build_android.sh
+        gradle assembleDebug
 
   Discord-CI:
     runs-on: ubuntu-18.04
