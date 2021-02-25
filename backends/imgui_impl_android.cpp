@@ -31,26 +31,26 @@
 
 static double                                   g_Time = 0.0;
 static ANativeWindow*                           g_Window;
-static char                                     g_logTag[] = "ImguiExample";
-static std::map<int32_t, std::queue<int32_t>>   g_keyEventQueues;
+static char                                     g_LogTag[] = "ImguiExample";
+static std::map<int32_t, std::queue<int32_t>>   g_KeyEventQueues;
 
 int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
 {
-    ImGuiIO &io = ImGui::GetIO();
-    int32_t evType = AInputEvent_getType(inputEvent);
-    switch (evType)
+    ImGuiIO& io = ImGui::GetIO();
+    int32_t event_type = AInputEvent_getType(inputEvent);
+    switch (event_type)
     {
     case AINPUT_EVENT_TYPE_KEY:
     {
-        int32_t evKeyCode = AKeyEvent_getKeyCode(inputEvent);
-        int32_t evAction = AKeyEvent_getAction(inputEvent);
-        int32_t evMetaState = AKeyEvent_getMetaState(inputEvent);
+        int32_t event_key_code = AKeyEvent_getKeyCode(inputEvent);
+        int32_t event_action = AKeyEvent_getAction(inputEvent);
+        int32_t event_meta_state = AKeyEvent_getMetaState(inputEvent);
 
-        io.KeyCtrl = ((evMetaState & AMETA_CTRL_ON) != 0);
-        io.KeyShift = ((evMetaState & AMETA_SHIFT_ON) != 0);
-        io.KeyAlt = ((evMetaState & AMETA_ALT_ON) != 0);
+        io.KeyCtrl = ((event_meta_state & AMETA_CTRL_ON) != 0);
+        io.KeyShift = ((event_meta_state & AMETA_SHIFT_ON) != 0);
+        io.KeyAlt = ((event_meta_state & AMETA_ALT_ON) != 0);
 
-        switch (evAction)
+        switch (event_action)
         {
         // todo: AKEY_EVENT_ACTION_DOWN and AKEY_EVENT_ACTION_UP occur at once
         // as soon as a touch pointer goes up from a key. We use a simple key event queue
@@ -58,7 +58,7 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
         // ...or consider ImGui IO queue, if suitable: https://github.com/ocornut/imgui/issues/2787
         case AKEY_EVENT_ACTION_DOWN:
         case AKEY_EVENT_ACTION_UP:
-            g_keyEventQueues[evKeyCode].push(evAction);
+            g_KeyEventQueues[event_key_code].push(event_action);
             break;
         default:
             break;
@@ -67,20 +67,20 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
     }
     case AINPUT_EVENT_TYPE_MOTION:
     {
-        int32_t evAction = AMotionEvent_getAction(inputEvent);
-        int32_t evPointerIndex = (evAction & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-        int32_t evPointerId = AMotionEvent_getPointerId(inputEvent, evPointerIndex);
-        evAction &= AMOTION_EVENT_ACTION_MASK;
-        switch (evAction)
+        int32_t event_action = AMotionEvent_getAction(inputEvent);
+        int32_t event_pointer_index = (event_action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+        int32_t event_pointer_id = AMotionEvent_getPointerId(inputEvent, event_pointer_index);
+        event_action &= AMOTION_EVENT_ACTION_MASK;
+        switch (event_action)
         {
         case AMOTION_EVENT_ACTION_DOWN:
         case AMOTION_EVENT_ACTION_UP:
-            io.MouseDown[0] = (evAction == AMOTION_EVENT_ACTION_DOWN) ? true : false;
+            io.MouseDown[0] = (event_action == AMOTION_EVENT_ACTION_DOWN) ? true : false;
             // intended fallthrough...
         case AMOTION_EVENT_ACTION_MOVE:
             io.MousePos = ImVec2(
-                AMotionEvent_getX(inputEvent, evPointerIndex),
-                AMotionEvent_getY(inputEvent, evPointerIndex));
+                AMotionEvent_getX(inputEvent, event_pointer_index),
+                AMotionEvent_getY(inputEvent, event_pointer_index));
             break;
         default:
             break;
@@ -100,7 +100,7 @@ bool ImGui_ImplAndroid_Init(ANativeWindow* window)
     g_Time = 0.0;
 
     // Setup back-end capabilities flags
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     // todo: any reasonable io.BackendFlags?
     io.BackendPlatformName = "imgui_impl_android";
 
@@ -131,31 +131,33 @@ bool ImGui_ImplAndroid_Init(ANativeWindow* window)
     return true;
 }
 
-void ImGui_ImplAndroid_Shutdown() {}
+void ImGui_ImplAndroid_Shutdown()
+{
+}
 
 void ImGui_ImplAndroid_NewFrame()
 {
-    ImGuiIO &io = ImGui::GetIO();
+    ImGuiIO& io = ImGui::GetIO();
     IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer back-end. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
 
     // Process queued key events
-    for (auto &keyQueue : g_keyEventQueues)
+    for (auto& key_queue : g_KeyEventQueues)
     {
-        if (keyQueue.second.size() == 0)
+        if (key_queue.second.empty())
             continue;
-        io.KeysDown[keyQueue.first] = (keyQueue.second.front() == AKEY_EVENT_ACTION_DOWN);
-        keyQueue.second.pop();
+        io.KeysDown[key_queue.first] = (key_queue.second.front() == AKEY_EVENT_ACTION_DOWN);
+        key_queue.second.pop();
     }
 
     // Setup display size (every frame to accommodate for window resizing)
-    int32_t w = ANativeWindow_getWidth(g_Window);
-    int32_t h = ANativeWindow_getHeight(g_Window);
-    int display_w = w;
-    int display_h = h;
+    int32_t window_width = ANativeWindow_getWidth(g_Window);
+    int32_t window_height = ANativeWindow_getHeight(g_Window);
+    int display_width = window_width;
+    int display_height = window_height;
 
-    io.DisplaySize = ImVec2((float)w, (float)h);
-    if (w > 0 && h > 0)
-        io.DisplayFramebufferScale = ImVec2((float)display_w / w, (float)display_h / h);
+    io.DisplaySize = ImVec2((float)window_width, (float)window_height);
+    if (window_width > 0 && window_height > 0)
+        io.DisplayFramebufferScale = ImVec2((float)display_width / window_width, (float)display_height / window_height);
 
     // Setup time step
     struct timespec current_timespec;
