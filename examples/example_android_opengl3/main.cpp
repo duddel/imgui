@@ -6,6 +6,7 @@
 #include "imgui_impl_opengl3.h"
 #include <android/log.h>
 #include <android_native_app_glue.h>
+#include <android/asset_manager.h>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
 
@@ -87,6 +88,24 @@ static int pollUnicodeChars()
     return 0;
 }
 
+static ImFont* add_font_from_assets_ttf(const char* filename, float size_pixels)
+{
+    ImFont* font = NULL;
+    AAsset* asset_descriptor = AAssetManager_open(g_App->activity->assetManager, filename, AASSET_MODE_BUFFER);
+    if(asset_descriptor)
+    {
+        ImGuiIO& io = ImGui::GetIO();
+        auto num_bytes = AAsset_getLength(asset_descriptor);
+        void* file_data = IM_ALLOC(num_bytes);
+        int64_t num_bytes_read = AAsset_read(asset_descriptor, file_data, num_bytes);
+        AAsset_close(asset_descriptor);
+        IM_ASSERT(num_bytes_read == num_bytes);
+        font = io.Fonts->AddFontFromMemoryTTF(file_data, num_bytes, size_pixels);
+        IM_FREE(file_data);
+    }
+    return font;
+}
+
 void init(struct android_app* app)
 {
     if (g_Initialized)
@@ -141,8 +160,24 @@ void init(struct android_app* app)
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = NULL;
     ImGui::StyleColorsDark();
-    ImGui_ImplAndroid_Init(app->window);
+    ImGui_ImplAndroid_Init(g_App->window);
     ImGui_ImplOpenGL3_Init("#version 300 es");
+
+    // Load Fonts
+    // - If no fonts are loaded, dear imgui will use the default font. You can also load multiple fonts and use ImGui::PushFont()/PopFont() to select them.
+    // - add_font_from_assets_ttf() will return the ImFont* so you can store it if you need to select the font among multiple.
+    // - If the file cannot be loaded, the function will return NULL. Please handle those errors in your application (e.g. use an assertion, or display an error and quit).
+    // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
+    // - Read 'docs/FONTS.md' for more instructions and details.
+    // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
+    // - The TTF files have to be placed into the assets/ directory of the Android app.
+    //io.Fonts->AddFontDefault();
+    //add_font_from_assets_ttf("Roboto-Medium.ttf", 16.0f);
+    //add_font_from_assets_ttf("Cousine-Regular.ttf", 15.0f);
+    //add_font_from_assets_ttf("DroidSans.ttf", 16.0f);
+    //add_font_from_assets_ttf("ProggyTiny.ttf", 10.0f);
+    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
+    //IM_ASSERT(font != NULL);
 
     // Arbitrary scale-up
     // todo: Put some effort into DPI awareness
