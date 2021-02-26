@@ -112,6 +112,7 @@ void init(struct android_app* app)
         return;
 
     g_App = app;
+    ANativeWindow_acquire(g_App->window);
 
     // Initialize EGL
     // This is mostly boilerplate code for EGL...
@@ -170,8 +171,13 @@ void init(struct android_app* app)
     // - The fonts will be rasterized at a given size (w/ oversampling) and stored into a texture when calling ImFontAtlas::Build()/GetTexDataAsXXXX(), which ImGui_ImplXXXX_NewFrame below will call.
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
-    // - The TTF files have to be placed into the assets/ directory of the Android app.
-    //io.Fonts->AddFontDefault();
+    // - The TTF files have to be placed into the assets/ directory (android/app/src/main/assets).
+
+    // We load the default font with increased size to improve readability on many devices with "high" DPI.
+    // todo: Put some effort into DPI awareness
+    ImFontConfig font_cfg;
+    font_cfg.SizePixels = 22.0f;
+    io.Fonts->AddFontDefault(&font_cfg);
     //add_font_from_assets_ttf("Roboto-Medium.ttf", 16.0f);
     //add_font_from_assets_ttf("Cousine-Regular.ttf", 15.0f);
     //add_font_from_assets_ttf("DroidSans.ttf", 16.0f);
@@ -285,6 +291,7 @@ void shutdown()
     g_EglDisplay = EGL_NO_DISPLAY;
     g_EglContext = EGL_NO_CONTEXT;
     g_EglSurface = EGL_NO_SURFACE;
+    ANativeWindow_release(g_App->window);
 
     g_Initialized = false;
 }
