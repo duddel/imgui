@@ -88,7 +88,7 @@ static int pollUnicodeChars()
     return 0;
 }
 
-static ImFont* add_font_from_assets_ttf(const char* filename, float size_pixels)
+static ImFont* add_font_from_assets_ttf(const char* filename, float size_pixels, const ImFontConfig* font_cfg = NULL, const ImWchar* glyph_ranges = NULL)
 {
     ImFont* font = NULL;
     AAsset* asset_descriptor = AAssetManager_open(g_App->activity->assetManager, filename, AASSET_MODE_BUFFER);
@@ -100,8 +100,8 @@ static ImFont* add_font_from_assets_ttf(const char* filename, float size_pixels)
         int64_t num_bytes_read = AAsset_read(asset_descriptor, file_data, num_bytes);
         AAsset_close(asset_descriptor);
         IM_ASSERT(num_bytes_read == num_bytes);
-        font = io.Fonts->AddFontFromMemoryTTF(file_data, num_bytes, size_pixels);
-        IM_FREE(file_data);
+        // Ownership of file_data is transfered to ImGui. Deletion is handled by ImGui.
+        font = io.Fonts->AddFontFromMemoryTTF(file_data, num_bytes, size_pixels, font_cfg, glyph_ranges);
     }
     return font;
 }
