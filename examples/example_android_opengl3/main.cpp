@@ -88,22 +88,19 @@ static int pollUnicodeChars()
     return 0;
 }
 
-static ImFont* add_font_from_assets_ttf(const char* filename, float size_pixels, const ImFontConfig* font_cfg = NULL, const ImWchar* glyph_ranges = NULL)
+static int GetAssetData(const char* filename, void** outData)
 {
-    ImFont* font = NULL;
+    int num_bytes = 0;
     AAsset* asset_descriptor = AAssetManager_open(g_App->activity->assetManager, filename, AASSET_MODE_BUFFER);
     if(asset_descriptor)
     {
-        ImGuiIO& io = ImGui::GetIO();
-        auto num_bytes = AAsset_getLength(asset_descriptor);
-        void* file_data = IM_ALLOC(num_bytes);
-        int64_t num_bytes_read = AAsset_read(asset_descriptor, file_data, num_bytes);
+        num_bytes = AAsset_getLength(asset_descriptor);
+        *outData = IM_ALLOC(num_bytes);
+        int64_t num_bytes_read = AAsset_read(asset_descriptor, *outData, num_bytes);
         AAsset_close(asset_descriptor);
         IM_ASSERT(num_bytes_read == num_bytes);
-        // Ownership of file_data is transfered to ImGui. Deletion is handled by ImGui.
-        font = io.Fonts->AddFontFromMemoryTTF(file_data, num_bytes, size_pixels, font_cfg, glyph_ranges);
     }
-    return font;
+    return num_bytes;
 }
 
 void init(struct android_app* app)
@@ -178,11 +175,23 @@ void init(struct android_app* app)
     ImFontConfig font_cfg;
     font_cfg.SizePixels = 22.0f;
     io.Fonts->AddFontDefault(&font_cfg);
-    //add_font_from_assets_ttf("Roboto-Medium.ttf", 16.0f);
-    //add_font_from_assets_ttf("Cousine-Regular.ttf", 15.0f);
-    //add_font_from_assets_ttf("DroidSans.ttf", 16.0f);
-    //add_font_from_assets_ttf("ProggyTiny.ttf", 10.0f);
-    //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese());
+    //void* font_data;
+    //int font_data_size;
+    //ImFont* font;
+    //font_data_size = GetAssetData("Roboto-Medium.ttf", &font_data);
+    //font = io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, 16.0f); // Ownership of font_data is transfered to ImGui. Deletion is handled by ImGui.
+    //IM_ASSERT(font != NULL);
+    //font_data_size = GetAssetData("Cousine-Regular.ttf", &font_data);
+    //font = io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, 15.0f); // Ownership of font_data is transfered to ImGui. Deletion is handled by ImGui.
+    //IM_ASSERT(font != NULL);
+    //font_data_size = GetAssetData("DroidSans.ttf", &font_data);
+    //font = io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, 16.0f); // Ownership of font_data is transfered to ImGui. Deletion is handled by ImGui.
+    //IM_ASSERT(font != NULL);
+    //font_data_size = GetAssetData("ProggyTiny.ttf", &font_data);
+    //font = io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, 10.0f); // Ownership of font_data is transfered to ImGui. Deletion is handled by ImGui.
+    //IM_ASSERT(font != NULL);
+    //font_data_size = GetAssetData("ArialUni.ttf", &font_data);
+    //font = io.Fonts->AddFontFromMemoryTTF(font_data, font_data_size, 18.0f, NULL, io.Fonts->GetGlyphRangesJapanese()); // Ownership of font_data is transfered to ImGui. Deletion is handled by ImGui.
     //IM_ASSERT(font != NULL);
 
     // Arbitrary scale-up
