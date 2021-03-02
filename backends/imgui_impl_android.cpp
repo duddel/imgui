@@ -2,10 +2,10 @@
 // This needs to be used along with the OpenGL 3 Renderer (imgui_impl_opengl3)
 
 // Implemented features:
-//  [x] Basic mouse input via touch
-//  [x] Open soft keyboard if io.WantTextInput and perform proper keyboard input
-//  [x] Handle Unicode characters
-//  [ ] Handle physical mouse input
+//  [X] Platform: Keyboard arrays indexed using AKEYCODE_* codes, e.g. ImGui::IsKeyPressed(AKEYCODE_SPACE).
+//  [ ] Platform: Clipboard support.
+//  [ ] Platform: Gamepad support. Enable with 'io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad'.
+//  [ ] Platform: Mouse cursor shape and visibility. Disable with 'io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange'. FIXME: Check if this is even possible with Android.
 
 // You can copy and use unmodified imgui_impl_* files in your project. See main.cpp for an example of using this.
 // If you are new to dear imgui, read examples/README.txt and read the documentation at the top of imgui.cpp.
@@ -13,13 +13,14 @@
 
 // CHANGELOG
 // (minor and older changes stripped away, please see git history for details)
+//  2021-03-02: Support for physical pointer device input (such as physical mouse)
 //  2020-09-13: Support for Unicode characters
 //  2020-08-31: On-screen and physical keyboard input (ASCII characters only)
 //  2020-03-02: basic draft, touch input
 
 #include "imgui.h"
 #include "imgui_impl_android.h"
-#include <ctime>
+#include <time.h>
 #include <map>
 #include <queue>
 
@@ -32,7 +33,7 @@
 static double                                   g_Time = 0.0;
 static ANativeWindow*                           g_Window;
 static char                                     g_LogTag[] = "ImguiExample";
-static std::map<int32_t, std::queue<int32_t>>   g_KeyEventQueues;
+static std::map<int32_t, std::queue<int32_t>>   g_KeyEventQueues; // FIXME: Remove dependency on map and queue once we use upcoming input queue.
 
 int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
 {
@@ -52,7 +53,7 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
 
         switch (event_action)
         {
-        // todo: AKEY_EVENT_ACTION_DOWN and AKEY_EVENT_ACTION_UP occur at once
+        // FIXME: AKEY_EVENT_ACTION_DOWN and AKEY_EVENT_ACTION_UP occur at once
         // as soon as a touch pointer goes up from a key. We use a simple key event queue
         // and process one event per key per ImGui frame in ImGui_ImplAndroid_NewFrame().
         // ...or consider ImGui IO queue, if suitable: https://github.com/ocornut/imgui/issues/2787
@@ -69,18 +70,41 @@ int32_t ImGui_ImplAndroid_HandleInputEvent(AInputEvent* inputEvent)
     {
         int32_t event_action = AMotionEvent_getAction(inputEvent);
         int32_t event_pointer_index = (event_action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
-        int32_t event_pointer_id = AMotionEvent_getPointerId(inputEvent, event_pointer_index);
         event_action &= AMOTION_EVENT_ACTION_MASK;
         switch (event_action)
         {
         case AMOTION_EVENT_ACTION_DOWN:
         case AMOTION_EVENT_ACTION_UP:
-            io.MouseDown[0] = (event_action == AMOTION_EVENT_ACTION_DOWN) ? true : false;
-            // intended fallthrough...
-        case AMOTION_EVENT_ACTION_MOVE:
+            // Physical mouse buttons (and probably other physical devices) also invoke the actions AMOTION_EVENT_ACTION_DOWN/_UP,
+            // but we have to process them separately to identify the actual button pressed. This is done below via
+            // AMOTION_EVENT_ACTION_BUTTON_PRESS/_RELEASE. Here, we only process "FINGER" input (and "UNKNOWN", as a fallback).
+            if((AMotionEvent_getToolType(inputEvent, event_pointer_index) == AMOTION_EVENT_TOOL_TYPE_FINGER)
+            || (AMotionEvent_getToolType(inputEvent, event_pointer_index) == AMOTION_EVENT_TOOL_TYPE_UNKNOWN))
+            {
+                io.MouseDown[0] = (event_action == AMOTION_EVENT_ACTION_DOWN) ? true : false;
+                io.MousePos = ImVec2(
+                        AMotionEvent_getX(inputEvent, event_pointer_index),
+                        AMotionEvent_getY(inputEvent, event_pointer_index));
+            }
+            break;
+        case AMOTION_EVENT_ACTION_BUTTON_PRESS:
+        case AMOTION_EVENT_ACTION_BUTTON_RELEASE:
+            {
+                int32_t button_state = AMotionEvent_getButtonState(inputEvent);
+                io.MouseDown[0] = (button_state & AMOTION_EVENT_BUTTON_PRIMARY) ? true : false;
+                io.MouseDown[1] = (button_state & AMOTION_EVENT_BUTTON_SECONDARY) ? true : false;
+                io.MouseDown[2] = (button_state & AMOTION_EVENT_BUTTON_TERTIARY) ? true : false;
+            }
+            break;
+        case AMOTION_EVENT_ACTION_HOVER_MOVE: // Hovering: Tool moves while NOT pressed (such as a physical mouse)
+        case AMOTION_EVENT_ACTION_MOVE: // Touch pointer moves while DOWN
             io.MousePos = ImVec2(
                 AMotionEvent_getX(inputEvent, event_pointer_index),
                 AMotionEvent_getY(inputEvent, event_pointer_index));
+            break;
+        case AMOTION_EVENT_ACTION_SCROLL:
+            io.MouseWheel = AMotionEvent_getAxisValue(inputEvent, AMOTION_EVENT_AXIS_VSCROLL, event_pointer_index);
+            io.MouseWheelH = AMotionEvent_getAxisValue(inputEvent, AMOTION_EVENT_AXIS_HSCROLL, event_pointer_index);
             break;
         default:
             break;
@@ -101,7 +125,6 @@ bool ImGui_ImplAndroid_Init(ANativeWindow* window)
 
     // Setup back-end capabilities flags
     ImGuiIO& io = ImGui::GetIO();
-    // todo: any reasonable io.BackendFlags?
     io.BackendPlatformName = "imgui_impl_android";
 
     // Keyboard mapping. ImGui will use those indices to peek into the io.KeysDown[] array.
@@ -141,6 +164,7 @@ void ImGui_ImplAndroid_NewFrame()
     IM_ASSERT(io.Fonts->IsBuilt() && "Font atlas not built! It is generally built by the renderer back-end. Missing call to renderer _NewFrame() function? e.g. ImGui_ImplOpenGL3_NewFrame().");
 
     // Process queued key events
+    // FIXME: This is a workaround for multiple key event actions occuring at once (see above) and can be removed once we use upcoming input queue.
     for (auto& key_queue : g_KeyEventQueues)
     {
         if (key_queue.second.empty())

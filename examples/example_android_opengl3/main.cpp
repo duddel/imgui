@@ -174,7 +174,7 @@ void init(struct android_app* app)
     // - The TTF files have to be placed into the assets/ directory (android/app/src/main/assets).
 
     // We load the default font with increased size to improve readability on many devices with "high" DPI.
-    // todo: Put some effort into DPI awareness
+    // FIXME: Put some effort into DPI awareness
     ImFontConfig font_cfg;
     font_cfg.SizePixels = 22.0f;
     io.Fonts->AddFontDefault(&font_cfg);
@@ -186,7 +186,7 @@ void init(struct android_app* app)
     //IM_ASSERT(font != NULL);
 
     // Arbitrary scale-up
-    // todo: Put some effort into DPI awareness
+    // FIXME: Put some effort into DPI awareness
     ImGui::GetStyle().ScaleAllSizes(3.0f);
 
     g_Initialized = true;
@@ -204,7 +204,7 @@ void tick()
         ImGuiIO& io = ImGui::GetIO();
 
         // Poll Unicode characters via JNI
-        // todo: do not call this every frame because of JNI overhead
+        // FIXME: do not call this every frame because of JNI overhead
         pollUnicodeChars();
 
         // Open on-screen (soft) input if demanded by Dear ImGui
