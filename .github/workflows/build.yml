@@ -471,7 +471,7 @@ jobs:
   Discord-CI:
     runs-on: ubuntu-18.04
     if: always()
-    needs: [Windows, Linux, MacOS, iOS, Emscripten]
+    needs: [Windows, Linux, MacOS, iOS, Emscripten, Android]
     steps:
     - uses: dearimgui/github_discord_notifier@latest
       with:
